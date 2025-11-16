@@ -1,0 +1,21 @@
+# Env
+.env
+.env.*
+.envrc
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+tmp/
+
+# Docker/Postgres data
+docker/postgres/pgdata/
+docker/pgadmin/pgadmin4.db
+docker/pgadmin/sessions/
+docker/pgadmin/storage/
+
+# Go
+bin/
+vendor/
