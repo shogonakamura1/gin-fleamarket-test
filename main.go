@@ -61,15 +61,12 @@ var (
 func initDB() *gorm.DB {
 	infra.Initialize()
 
-	// まずpostgresに接続してデータベースを作成
 	db := infra.SetupDB()
 
-	// DB_NAMEがpostgresの場合のみ、fleamarketデータベースを作成
 	targetDBName := "fleamarket"
 	currentDBName := os.Getenv("DB_NAME")
 
 	if currentDBName == "postgres" {
-		// fleamarketデータベースが存在しない場合は作成
 		var exists int
 		db.Raw("SELECT 1 FROM pg_database WHERE datname = ?", targetDBName).Scan(&exists)
 		if exists == 0 {
@@ -80,7 +77,6 @@ func initDB() *gorm.DB {
 			}
 		}
 
-		// fleamarketデータベースに接続し直す
 		dbHost := os.Getenv("DB_HOST")
 		dbUser := os.Getenv("DB_USER")
 		dbPassword := os.Getenv("DB_PASSWORD")
@@ -111,7 +107,6 @@ func initDB() *gorm.DB {
 		log.Printf("Using existing database: %s", currentDBName)
 	}
 
-	// Run AutoMigrate only when explicitly enabled
 	if os.Getenv("AUTO_MIGRATE") == "true" {
 		if err := db.AutoMigrate(&models.User{}, &models.Item{}); err != nil {
 			panic("Failed to migrate database")
@@ -122,14 +117,11 @@ func initDB() *gorm.DB {
 }
 
 func main() {
-	// Lambda環境かどうかを検出
 	isLambda := os.Getenv("AWS_LAMBDA_RUNTIME_API") != ""
 
 	if isLambda {
-		// Lambda環境: データベース接続を非同期で行い、サーバーを先に起動
 		log.Println("Lambda environment detected, initializing database asynchronously...")
 
-		// Lambda Web Adapter用のポート設定
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = os.Getenv("AWS_LWA_PORT")
@@ -138,20 +130,14 @@ func main() {
 			port = "8080"
 		}
 
-		// ルーターをセットアップ（データベース接続が完了するまで待機するミドルウェアを含む）
-		// gin.New()を使用して、LoggerとRecoveryミドルウェアを手動で追加（高速化のため）
 		r := gin.New()
 		r.Use(gin.Logger())
 		r.Use(gin.Recovery())
 		r.Use(cors.Default())
 
-		// データベース接続が完了したらルーターをセットアップ
-		// ミドルウェア内でデータベース接続を待機し、ルーターを動的に設定
 		var routerMutex sync.RWMutex
 		var actualRouter *gin.Engine
 
-		// ヘルスチェックエンドポイント（データベース接続を待たない）
-		// Lambda Web Adapterはルートパス（/）でヘルスチェックを行う
 		r.GET("/", func(c *gin.Context) {
 			log.Println("Health check endpoint called (root path)")
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -161,10 +147,8 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 
-		// すべてのリクエストを処理するハンドラー
 		handler := func(c *gin.Context) {
 			log.Printf("Request received: %s %s", c.Request.Method, c.Request.URL.Path)
-			// データベース接続が完了するまで待機
 			select {
 			case <-dbReady:
 				routerMutex.RLock()
@@ -179,7 +163,6 @@ func main() {
 				} else {
 					routerMutex.RUnlock()
 				}
-				// 実際のルーターでリクエストを処理
 				routerMutex.RLock()
 				actualRouter.ServeHTTP(c.Writer, c.Request)
 				routerMutex.RUnlock()
@@ -189,10 +172,8 @@ func main() {
 			}
 		}
 
-		// すべてのリクエストを処理するハンドラー（NoRouteのみを使用）
 		r.NoRoute(handler)
 
-		// http.Serverを使用して明示的にサーバーを起動
 		srv := &http.Server{
 			Addr:         ":" + port,
 			Handler:      r,
@@ -201,12 +182,9 @@ func main() {
 			IdleTimeout:  60 * time.Second,
 		}
 
-		// サーバーを先に起動（データベース接続を待たない）
-		// Lambda Web Adapterのヘルスチェックに即座に応答できるように、サーバーを非同期で起動
 		serverReady := make(chan bool, 1)
 		go func() {
 			log.Printf("Starting server on port %s (Lambda environment)", port)
-			// サーバーがリッスン状態になったことを通知
 			ln, err := net.Listen("tcp", ":"+port)
 			if err != nil {
 				log.Fatalf("Failed to listen on port %s: %v", port, err)
@@ -217,13 +195,10 @@ func main() {
 			}
 		}()
 
-		// サーバーがリッスン状態になるまで待つ（Lambda Web Adapterのヘルスチェックに応答できるように）
 		<-serverReady
-		// サーバーが完全にリッスン状態になるまで少し待つ
 		time.Sleep(50 * time.Millisecond)
 		log.Printf("Server started on port %s, ready to handle requests (database connecting in background)", port)
 
-		// データベース接続を非同期で開始（サーバー起動の後）
 		go func() {
 			dbInitOnce.Do(func() {
 				globalDB = initDB()
@@ -232,14 +207,11 @@ func main() {
 			})
 		}()
 
-		// Lambda環境では、サーバーを起動したままブロックしない
-		select {} // 無限に待機（Lambda関数が終了するまで）
+		select {}
 	} else {
-		// ローカル環境: 通常の初期化
 		db := initDB()
 		r := setupRouter(db)
 
-		// Lambda Web Adapter用のポート設定
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = os.Getenv("AWS_LWA_PORT")
@@ -248,7 +220,6 @@ func main() {
 			port = "8080"
 		}
 
-		// http.Serverを使用して明示的にサーバーを起動
 		srv := &http.Server{
 			Addr:         ":" + port,
 			Handler:      r,
@@ -257,7 +228,6 @@ func main() {
 			IdleTimeout:  60 * time.Second,
 		}
 
-		// ローカル環境: 通常の起動とシグナルハンドリング
 		go func() {
 			log.Printf("Starting server on port %s (local environment)", port)
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -265,7 +235,6 @@ func main() {
 			}
 		}()
 
-		// シグナルハンドリング
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
