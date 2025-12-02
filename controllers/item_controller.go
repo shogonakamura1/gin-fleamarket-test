@@ -128,7 +128,13 @@ func (c *ItemController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	userID := user.(*models.User).ID
+	userModel := user.(*models.User)
+	userID := userModel.ID
+
+	// adminロールの場合は、userIDを0にして全ユーザーのアイテムを削除可能にする
+	if userModel.Role == "admin" {
+		userID = 0
+	}
 
 	itemID, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil {

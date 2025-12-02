@@ -15,14 +15,19 @@ type IAuthService interface {
 	Signup(email string, password string) error
 	Login(email string, password string) (*string, error)
 	GetUserFromToken(tokenString string) (*models.User, error)
+	Logout(tokenString string) error
 }
 
 type AuthService struct {
-	repository repositories.IAuthRepository
+	repository      repositories.IAuthRepository
+	tokenRepository repositories.ITokenRepository
 }
 
-func NewAuthService(repository repositories.IAuthRepository) IAuthService {
-	return &AuthService{repository: repository}
+func NewAuthService(repository repositories.IAuthRepository, tokenRepository repositories.ITokenRepository) IAuthService {
+	return &AuthService{
+		repository:      repository,
+		tokenRepository: tokenRepository,
+	}
 }
 
 func (s *AuthService) Signup(email string, password string) error {
@@ -49,7 +54,7 @@ func (s *AuthService) Login(email string, password string) (*string, error) {
 		return nil, err
 	}
 
-	token, err := CreateToken(foundUser.ID, foundUser.Email)
+	token, err := CreateToken(foundUser.ID, foundUser.Email, foundUser.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +62,11 @@ func (s *AuthService) Login(email string, password string) (*string, error) {
 	return token, nil
 }
 
-func CreateToken(userID uint, email string) (*string, error) {
+func CreateToken(userID uint, email string, role string) (*string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":   userID,
 		"email": email,
+		"role":  role,
 		"exp":   time.Now().Add(time.Hour).Unix(),
 	})
 
@@ -88,10 +94,50 @@ func (s *AuthService) GetUserFromToken(tokenString string) (*models.User, error)
 			return nil, jwt.ErrTokenExpired
 		}
 
+		// トークンがブラックリストに含まれているかチェック
+		isBlacklisted, err := s.tokenRepository.IsTokenBlacklisted(tokenString)
+		if err != nil {
+			return nil, err
+		}
+		if isBlacklisted {
+			return nil, fmt.Errorf("token is blacklisted")
+		}
+
 		user, err = s.repository.FindUser(claims["email"].(string))
 		if err != nil {
 			return nil, err
 		}
+		// デバッグ用ログ
+		fmt.Printf("GetUserFromToken: Found user ID=%d, Email=%s, Role=%s\n",
+			user.ID, user.Email, user.Role)
 	}
 	return user, nil
+}
+
+func (s *AuthService) Logout(tokenString string) error {
+	// トークンをパースして有効期限を取得
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected method: %v", token.Header["alg"])
+		}
+		return []byte(os.Getenv("SECRET_KEY")), nil
+	})
+	if err != nil {
+		return err
+	}
+
+	var expiresAt int64
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		if exp, ok := claims["exp"].(float64); ok {
+			expiresAt = int64(exp)
+		} else {
+			// 有効期限が取得できない場合は、現在時刻から1時間後を設定
+			expiresAt = time.Now().Add(time.Hour).Unix()
+		}
+	} else {
+		expiresAt = time.Now().Add(time.Hour).Unix()
+	}
+
+	// トークンをブラックリストに追加
+	return s.tokenRepository.AddBlacklistedToken(tokenString, expiresAt)
 }

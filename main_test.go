@@ -78,7 +78,7 @@ func TestFindAll(t *testing.T) {
 func TestCreate(t *testing.T) {
 	router := setup()
 
-	token, err := services.CreateToken(1, "test1@example.com")
+	token, err := services.CreateToken(1, "test1@example.com", "user")
 	assert.Equal(t, nil, err)
 
 	createItemInput := dto.CreateItemInput{

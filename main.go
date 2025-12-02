@@ -31,23 +31,34 @@ func setupRouter(db *gorm.DB) *gin.Engine {
 	itemController := controllers.NewItemController(itemService)
 
 	authRepository := repositories.NewAuthRepository(db)
-	authService := services.NewAuthService(authRepository)
+	tokenDB := infra.SetupTokenDB()
+	tokenRepository := repositories.NewTokenRepository(tokenDB)
+	authService := services.NewAuthService(authRepository, tokenRepository)
 	authController := controllers.NewAuthController(authService)
+
+	// トークンブラックリスト用のマイグレーション
+	if os.Getenv("AUTO_MIGRATE") == "true" {
+		if err := tokenDB.AutoMigrate(&models.BlacklistedToken{}); err != nil {
+			log.Printf("Failed to migrate token blacklist database: %v", err)
+		}
+	}
 
 	r := gin.Default()
 	r.Use(cors.Default())
 	itemRouter := r.Group("/items")
 	itemRouterWithAuth := r.Group("/items", middlewares.AuthMiddleware(authService))
+	itemRouterWithAdminAuth := r.Group("/items", middlewares.AuthMiddleware(authService), middlewares.RoleBasedAccessControl("admin"))
 	authRouter := r.Group("/auth")
 
 	itemRouter.GET("", itemController.FindAll)
 	itemRouterWithAuth.GET("/:id", itemController.FindById)
 	itemRouterWithAuth.POST("", itemController.Create)
 	itemRouterWithAuth.PUT("/:id", itemController.Update)
-	itemRouterWithAuth.DELETE("/:id", itemController.Delete)
+	itemRouterWithAdminAuth.DELETE("/:id", itemController.Delete)
 
 	authRouter.POST("/signup", authController.Signup)
 	authRouter.POST("/login", authController.Login)
+	authRouter.POST("/logout", authController.Logout)
 
 	return r
 }
@@ -85,13 +96,21 @@ func initDB() *gorm.DB {
 		log.Printf("Connecting to fleamarket database: host=%s, user=%s, dbname=%s, port=%s",
 			dbHost, dbUser, targetDBName, dbPort)
 
+		// 本番環境ではsslmode=require、それ以外はsslmode=disable
+		env := os.Getenv("ENV")
+		sslmode := "disable"
+		if env == "prod" {
+			sslmode = "require"
+		}
+
 		dsn := fmt.Sprintf(
-			"host=%s user=%s password=%s dbname=%s port=%s sslmode=require TimeZone=Asia/Tokyo connect_timeout=10",
+			"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=Asia/Tokyo connect_timeout=10",
 			dbHost,
 			dbUser,
 			dbPassword,
 			targetDBName,
 			dbPort,
+			sslmode,
 		)
 
 		var err error
@@ -110,6 +129,12 @@ func initDB() *gorm.DB {
 	if os.Getenv("AUTO_MIGRATE") == "true" {
 		if err := db.AutoMigrate(&models.User{}, &models.Item{}); err != nil {
 			panic("Failed to migrate database")
+		}
+
+		// トークンブラックリスト用のSQLiteデータベースのマイグレーション
+		tokenDB := infra.SetupTokenDB()
+		if err := tokenDB.AutoMigrate(&models.BlacklistedToken{}); err != nil {
+			log.Printf("Failed to migrate token blacklist database: %v", err)
 		}
 	}
 

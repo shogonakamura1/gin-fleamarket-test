@@ -4,6 +4,7 @@ import (
 	"gin-fleamarket/dto"
 	"gin-fleamarket/services"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,6 +12,7 @@ import (
 type IAuthController interface {
 	Signup(ctx *gin.Context)
 	Login(ctx *gin.Context)
+	Logout(ctx *gin.Context)
 }
 
 type AuthController struct {
@@ -53,4 +55,26 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+func (c *AuthController) Logout(ctx *gin.Context) {
+	header := ctx.GetHeader("Authorization")
+	if header == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+		return
+	}
+
+	if !strings.HasPrefix(header, "Bearer ") {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+		return
+	}
+
+	tokenString := strings.TrimPrefix(header, "Bearer ")
+	err := c.service.Logout(tokenString)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "Successfully logged out"})
 }

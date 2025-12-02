@@ -19,3 +19,6 @@ docker/pgadmin/storage/
 # Go
 bin/
 vendor/
+
+# Token blacklist database
+token_blacklist.db

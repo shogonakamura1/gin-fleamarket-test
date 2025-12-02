@@ -75,9 +75,23 @@ func (r *ItemRepository) Create(newItem models.Item) (*models.Item, error) {
 }
 
 func (r *ItemRepository) Delete(itemID uint, userID uint) error {
-	deleteItem, err := r.FindById(itemID, userID)
-	if err != nil {
-		return err
+	var deleteItem models.Item
+
+	// userIDが0の場合はadminロールなので、user_idのチェックをスキップ
+	if userID == 0 {
+		result := r.db.First(&deleteItem, "id = ?", itemID)
+		if result.Error != nil {
+			if result.Error.Error() == "record not found" {
+				return errors.New("Item not found")
+			}
+			return result.Error
+		}
+	} else {
+		item, err := r.FindById(itemID, userID)
+		if err != nil {
+			return err
+		}
+		deleteItem = *item
 	}
 
 	result := r.db.Delete(&deleteItem)

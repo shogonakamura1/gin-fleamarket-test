@@ -11,33 +11,51 @@ import (
 )
 
 func SetupDB() *gorm.DB {
+	dbName := os.Getenv("DB_NAME")
 	env := os.Getenv("ENV")
 
-	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=require TimeZone=Asia/Tokyo",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_PORT"),
-	)
+	// DB_NAMEが設定されている場合はPostgreSQLを使用
+	// そうでない場合のみSQLiteのインメモリを使用
+	if dbName != "" && dbName != "postgres" {
+		// 本番環境ではsslmode=require、それ以外はsslmode=disable
+		sslmode := "disable"
+		if env == "prod" {
+			sslmode = "require"
+		}
 
-	var (
-		db  *gorm.DB
-		err error
-	)
+		dsn := fmt.Sprintf(
+			"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=Asia/Tokyo",
+			os.Getenv("DB_HOST"),
+			os.Getenv("DB_USER"),
+			os.Getenv("DB_PASSWORD"),
+			dbName,
+			os.Getenv("DB_PORT"),
+			sslmode,
+		)
 
-	if env == "prod" {
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			panic("Failed to connect to database")
+		}
 		log.Println("Setup postgres database")
-	} else {
-		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-		log.Println("Setup sqlite database")
+		return db
 	}
 
+	// デフォルトはSQLiteのインメモリ（テスト用）
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		panic("Failed to connect to database")
 	}
+	log.Println("Setup sqlite database (in-memory)")
+	return db
+}
 
+// SetupTokenDB トークンブラックリスト用のSQLiteデータベース接続を設定
+func SetupTokenDB() *gorm.DB {
+	db, err := gorm.Open(sqlite.Open("token_blacklist.db"), &gorm.Config{})
+	if err != nil {
+		panic("Failed to connect to token blacklist database")
+	}
+	log.Println("Setup token blacklist SQLite database")
 	return db
 }
