@@ -15,8 +15,8 @@ func SetupDB() *gorm.DB {
 	env := os.Getenv("ENV")
 
 	// DB_NAMEが設定されている場合はPostgreSQLを使用
-	// そうでない場合のみSQLiteのインメモリを使用
-	if dbName != "" && dbName != "postgres" {
+	// DB_NAME="postgres"の場合もPostgreSQL接続を許可（main.goで特別な処理があるため）
+	if dbName != "" {
 		// 本番環境ではsslmode=require、それ以外はsslmode=disable
 		sslmode := "disable"
 		if env == "prod" {

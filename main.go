@@ -36,11 +36,10 @@ func setupRouter(db *gorm.DB) *gin.Engine {
 	authService := services.NewAuthService(authRepository, tokenRepository)
 	authController := controllers.NewAuthController(authService)
 
-	// トークンブラックリスト用のマイグレーション
-	if os.Getenv("AUTO_MIGRATE") == "true" {
-		if err := tokenDB.AutoMigrate(&models.BlacklistedToken{}); err != nil {
-			log.Printf("Failed to migrate token blacklist database: %v", err)
-		}
+	// トークンブラックリスト用のマイグレーション（常に実行）
+	// テスト環境でもテーブルが必要なため、AUTO_MIGRATEの条件を外す
+	if err := tokenDB.AutoMigrate(&models.BlacklistedToken{}); err != nil {
+		log.Printf("Failed to migrate token blacklist database: %v", err)
 	}
 
 	r := gin.Default()

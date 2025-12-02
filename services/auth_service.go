@@ -107,9 +107,6 @@ func (s *AuthService) GetUserFromToken(tokenString string) (*models.User, error)
 		if err != nil {
 			return nil, err
 		}
-		// デバッグ用ログ
-		fmt.Printf("GetUserFromToken: Found user ID=%d, Email=%s, Role=%s\n",
-			user.ID, user.Email, user.Role)
 	}
 	return user, nil
 }
