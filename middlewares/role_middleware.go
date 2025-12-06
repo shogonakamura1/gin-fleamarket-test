@@ -25,11 +25,14 @@ func RoleBasedAccessControl(allowedRoles ...string) gin.HandlerFunc {
 			return
 		}
 
+		// 重要: トークンのロール情報ではなく、データベースのUSERテーブルのroleカラムを使用する
+		// AuthMiddlewareでGetUserFromTokenが呼ばれ、データベースから最新のユーザー情報が取得されている
 		// デバッグ用ログ
-		log.Printf("RoleBasedAccessControl: User ID=%d, Email=%s, Role=%s, AllowedRoles=%v",
+		log.Printf("RoleBasedAccessControl: User ID=%d, Email=%s, Role=%s (from DB), AllowedRoles=%v",
 			userModel.ID, userModel.Email, userModel.Role, allowedRoles)
 
 		// 許可されたロールかチェック（大文字小文字を無視、空白をトリム）
+		// userModel.Roleはデータベースから取得した最新のロール情報
 		hasAccess := false
 		userRole := strings.TrimSpace(strings.ToLower(userModel.Role))
 		for _, allowedRole := range allowedRoles {

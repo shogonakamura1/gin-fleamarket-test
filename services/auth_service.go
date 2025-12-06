@@ -2,8 +2,10 @@ package services
 
 import (
 	"fmt"
+	"gin-fleamarket/constants"
 	"gin-fleamarket/models"
 	"gin-fleamarket/repositories"
+	"log"
 	"os"
 	"time"
 
@@ -42,9 +44,28 @@ func (s *AuthService) Signup(email string, password string) error {
 		return err
 	}
 
+	// データベース内のユーザー数を取得
+	userCount, err := s.repository.CountUsers()
+	if err != nil {
+		return err
+	}
+
+	// デバッグ用ログ: ユーザー数を確認
+	log.Printf("Signup: Current user count in DB = %d", userCount)
+
+	// 最初のユーザー（ユーザー数が0件）の場合は管理者として登録
+	role := constants.RoleUser
+	if userCount == 0 {
+		role = constants.RoleAdmin
+		log.Printf("Signup: First user detected, setting role to admin for email=%s", email)
+	} else {
+		log.Printf("Signup: Existing users found (%d), setting role to user for email=%s", userCount, email)
+	}
+
 	user := models.User{
 		Email:    email,
 		Password: string(hashedPassword),
+		Role:     role,
 	}
 	return s.repository.CreateUser(user)
 }
@@ -139,10 +160,16 @@ func (s *AuthService) GetUserFromToken(tokenString string) (*models.User, error)
 			return nil, fmt.Errorf("token is blacklisted")
 		}
 
-		user, err = s.repository.FindUser(claims["email"].(string))
+		// 重要: トークンに含まれるロール情報は使用せず、データベースから最新のユーザー情報を取得する
+		// これにより、データベースのroleカラムの変更が即座に反映される
+		email := claims["email"].(string)
+		user, err = s.repository.FindUser(email)
 		if err != nil {
 			return nil, err
 		}
+		// デバッグ用ログ: データベースから取得したユーザー情報を確認
+		log.Printf("GetUserFromToken: Retrieved user from DB - ID=%d, Email=%s, Role=%s",
+			user.ID, user.Email, user.Role)
 	}
 	return user, nil
 }
