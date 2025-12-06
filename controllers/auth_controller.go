@@ -3,6 +3,7 @@ package controllers
 import (
 	"gin-fleamarket/dto"
 	"gin-fleamarket/services"
+	"log"
 	"net/http"
 	"strings"
 
@@ -33,6 +34,11 @@ func (c *AuthController) Signup(ctx *gin.Context) {
 
 	err := c.service.Signup(input.Email, input.Password)
 	if err != nil {
+		log.Printf("Signup error: %v", err)
+		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "UNIQUE constraint") {
+			ctx.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
 		return
 	}

@@ -1,9 +1,13 @@
 package services
 
 import (
+	"errors"
+	"gin-fleamarket/constants"
 	"gin-fleamarket/dto"
 	"gin-fleamarket/models"
 	"gin-fleamarket/repositories"
+
+	"gorm.io/gorm"
 )
 
 type IItemService interface {
@@ -11,7 +15,7 @@ type IItemService interface {
 	FindById(itemID uint, userID uint) (*models.Item, error)
 	Create(createItemInput dto.CreateItemInput, userID uint) (*models.Item, error)
 	Update(itemID uint, userID uint, updateItemInput dto.UpdateItemInput) (*models.Item, error)
-	Delete(itemID uint, userID uint) error
+	Delete(itemID uint) error
 }
 
 type ItemService struct {
@@ -27,7 +31,14 @@ func (s *ItemService) FindAll() (*[]models.Item, error) {
 }
 
 func (s *ItemService) FindById(itemID uint, userID uint) (*models.Item, error) {
-	return s.repository.FindById(itemID, userID)
+	item, err := s.repository.FindById(itemID, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New(constants.ErrItemNotFound)
+		}
+		return nil, err
+	}
+	return item, nil
 }
 
 func (s *ItemService) Create(createItemInput dto.CreateItemInput, userID uint) (*models.Item, error) {
@@ -42,26 +53,43 @@ func (s *ItemService) Create(createItemInput dto.CreateItemInput, userID uint) (
 }
 
 func (s *ItemService) Update(itemID uint, userID uint, updateItemInput dto.UpdateItemInput) (*models.Item, error) {
-	targetItem, err := s.FindById(itemID, userID)
+	updates := make(map[string]interface{})
+
+	if updateItemInput.Name != nil {
+		updates["name"] = *updateItemInput.Name
+	}
+	if updateItemInput.Price != nil {
+		updates["price"] = *updateItemInput.Price
+	}
+	if updateItemInput.Description != nil {
+		updates["description"] = *updateItemInput.Description
+	}
+	if updateItemInput.SoldOut != nil {
+		updates["sold_out"] = *updateItemInput.SoldOut
+	}
+
+	if len(updates) == 0 {
+		return nil, errors.New("no fields to update")
+	}
+
+	updatedItem, err := s.repository.Update(itemID, userID, updates)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New(constants.ErrItemNotFound)
+		}
 		return nil, err
 	}
 
-	if updateItemInput.Name != nil {
-		targetItem.Name = *updateItemInput.Name
-	}
-	if updateItemInput.Price != nil {
-		targetItem.Price = *updateItemInput.Price
-	}
-	if updateItemInput.Description != nil {
-		targetItem.Description = *updateItemInput.Description
-	}
-	if updateItemInput.SoldOut != nil {
-		targetItem.SoldOut = *updateItemInput.SoldOut
-	}
-	return s.repository.Update(*targetItem)
+	return updatedItem, nil
 }
 
-func (s *ItemService) Delete(itemID uint, userID uint) error {
-	return s.repository.Delete(itemID, userID)
+func (s *ItemService) Delete(itemID uint) error {
+	err := s.repository.Delete(itemID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New(constants.ErrItemNotFound)
+		}
+		return err
+	}
+	return nil
 }

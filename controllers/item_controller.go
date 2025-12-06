@@ -1,9 +1,11 @@
 package controllers
 
 import (
+	"gin-fleamarket/constants"
 	"gin-fleamarket/dto"
 	"gin-fleamarket/models"
 	"gin-fleamarket/services"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -29,7 +31,7 @@ func NewItemController(service services.IItemService) IItemController {
 func (c *ItemController) FindAll(ctx *gin.Context) {
 	items, err := c.service.FindAll()
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": constants.ErrUnexpected})
 		return
 	}
 
@@ -47,17 +49,17 @@ func (c *ItemController) FindById(ctx *gin.Context) {
 
 	itemID, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid id"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": constants.ErrInvalidID})
 		return
 	}
 
 	item, err := c.service.FindById(uint(itemID), userID)
 	if err != nil {
-		if err.Error() == "Item not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if err.Error() == constants.ErrItemNotFound {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": constants.ErrItemNotFound})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": constants.ErrUnexpected})
 		return
 	}
 
@@ -75,13 +77,14 @@ func (c *ItemController) Create(ctx *gin.Context) {
 
 	var input dto.CreateItemInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": constants.ErrInvalidInput})
 		return
 	}
 
 	newItem, err := c.service.Create(input, userID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("Create item error: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": constants.ErrUnexpected})
 		return
 	}
 
@@ -99,22 +102,22 @@ func (c *ItemController) Update(ctx *gin.Context) {
 
 	itemID, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid id"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": constants.ErrInvalidID})
 		return
 	}
 	var input dto.UpdateItemInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": constants.ErrInvalidInput})
 		return
 	}
 
 	updatedItem, err := c.service.Update(uint(itemID), userID, input)
 	if err != nil {
-		if err.Error() == "Item not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if err.Error() == constants.ErrItemNotFound {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": constants.ErrItemNotFound})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": constants.ErrUnexpected})
 		return
 	}
 
@@ -122,32 +125,20 @@ func (c *ItemController) Update(ctx *gin.Context) {
 }
 
 func (c *ItemController) Delete(ctx *gin.Context) {
-	user, exists := ctx.Get("user")
-	if !exists {
-		ctx.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	userModel := user.(*models.User)
-	userID := userModel.ID
-
-	// adminロールの場合は、userIDを0にして全ユーザーのアイテムを削除可能にする
-	if userModel.Role == "admin" {
-		userID = 0
-	}
-
 	itemID, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid id"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": constants.ErrInvalidID})
 		return
 	}
-	err = c.service.Delete(uint(itemID), userID)
+
+	err = c.service.Delete(uint(itemID))
+
 	if err != nil {
-		if err.Error() == "Item not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if err.Error() == constants.ErrItemNotFound {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": constants.ErrItemNotFound})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": constants.ErrUnexpected})
 		return
 	}
 

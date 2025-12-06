@@ -44,12 +44,10 @@ func (r *AuthRepository) FindUser(email string) (*models.User, error) {
 
 func (r *AuthRepository) CountUsers() (int64, error) {
 	var count int64
-	// ソフトデリートされたレコードは除外される（gorm.ModelのDeletedAtがnilのもののみカウント）
 	result := r.db.Model(&models.User{}).Count(&count)
 	if result.Error != nil {
 		return 0, result.Error
 	}
-	// デバッグ用ログ
 	log.Printf("CountUsers: Found %d users in database", count)
 	return count, nil
 }
