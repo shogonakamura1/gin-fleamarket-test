@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"gin-fleamarket/constants"
 	"gin-fleamarket/controllers"
 	"gin-fleamarket/infra"
 	"gin-fleamarket/middlewares"
@@ -46,7 +47,7 @@ func setupRouter(db *gorm.DB) *gin.Engine {
 	r.Use(cors.Default())
 	itemRouter := r.Group("/items")
 	itemRouterWithAuth := r.Group("/items", middlewares.AuthMiddleware(authService))
-	itemRouterWithAdminAuth := r.Group("/items", middlewares.AuthMiddleware(authService), middlewares.RoleBasedAccessControl("admin"))
+	itemRouterWithAdminAuth := r.Group("/items", middlewares.AuthMiddleware(authService), middlewares.RoleBasedAccessControl(constants.RoleAdmin))
 	authRouter := r.Group("/auth")
 
 	itemRouter.GET("", itemController.FindAll)
@@ -57,6 +58,7 @@ func setupRouter(db *gorm.DB) *gin.Engine {
 
 	authRouter.POST("/signup", authController.Signup)
 	authRouter.POST("/login", authController.Login)
+	authRouter.POST("/refresh", authController.RefreshToken)
 	authRouter.POST("/logout", authController.Logout)
 
 	return r

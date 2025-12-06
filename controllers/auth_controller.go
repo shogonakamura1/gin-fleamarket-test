@@ -12,6 +12,7 @@ import (
 type IAuthController interface {
 	Signup(ctx *gin.Context)
 	Login(ctx *gin.Context)
+	RefreshToken(ctx *gin.Context)
 	Logout(ctx *gin.Context)
 }
 
@@ -45,7 +46,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	token, err := c.service.Login(input.Email, input.Password)
+	tokenPair, err := c.service.Login(input.Email, input.Password)
 	if err != nil {
 		if err.Error() == "User not found" {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
@@ -54,7 +55,32 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"token": token})
+	ctx.JSON(http.StatusOK, dto.LoginResponse{
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+	})
+}
+
+func (c *AuthController) RefreshToken(ctx *gin.Context) {
+	var input dto.RefreshTokenInput
+	if err := ctx.ShouldBindJSON(&input); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tokenPair, err := c.service.RefreshToken(input.RefreshToken)
+	if err != nil {
+		if err.Error() == "token is expired" || err.Error() == "invalid refresh token" || err.Error() == "invalid token type" || err.Error() == "refresh token is blacklisted" {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Unexpected error"})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.LoginResponse{
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+	})
 }
 
 func (c *AuthController) Logout(ctx *gin.Context) {
