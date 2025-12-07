@@ -138,6 +138,7 @@
   - セキュリティグループによるアクセス制御
   - プライベートサブネットの活用
 
+以下にAWSのアーキテクチャ図を示す。
 https://github.com/user-attachments/assets/5a8a05a1-8f37-4be8-9a9d-b9e073794668
 
 
